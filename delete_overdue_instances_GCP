@@ -1,0 +1,91 @@
+#!/bin/bash
+
+# Prompt the user to select the project ID
+echo "Select the project ID:"
+echo "1. soleng-dev"
+echo "2. soleng-prod"
+read -p "Enter your choice: " CHOICE
+
+# Set the project ID based on the user's choice
+case $CHOICE in
+    1)
+        PROJECT_ID="soleng-dev"
+        ;;
+    2)
+        PROJECT_ID="soleng-prod"
+        ;;
+    *)
+        echo "Invalid choice. Exiting."
+        exit 1
+        ;;
+esac
+
+# Set the project ID as an environment variable
+export PROJECT_ID
+
+# Set variables for GCP
+gcloud config set project "$PROJECT_ID"
+
+# Set variables for Slack
+SLACK_URL="https://slack.com/api/chat.postMessage"
+SLACK_CHANNEL="#devops-cloud-cost-valid"
+
+# Function to delete a VM instance
+delete_instance() {
+  local instance_name=$1
+  local dry_run=$2
+  local project_id=$3
+
+  local zone=$(gcloud compute instances describe "$instance_name" --project "$project_id" --format "value(zone.basename())")
+
+  if [ "$dry_run" = "true" ]; then
+    echo "Instance $instance_name in zone $zone would have been deleted."
+  else
+    echo "Deleting instance $instance_name in zone $zone..."
+    gcloud compute instances delete "$instance_name" --project "$project_id" --zone "$zone" --quiet
+  fi
+}
+
+# Read input from the user
+read -p "Is this a dry run? (y/n): " dry_run_input
+
+dry_run=false
+if [ "$dry_run_input" = "y" ]; then
+  dry_run=true
+fi
+
+# Initialize the CSV file
+csv_file="deleted_instances.csv"
+echo "Instance Name,Delete Date" > "$csv_file"
+
+# Get the list of instances with delete_date label and without owner label
+instances=$(gcloud compute instances list \
+  --project "$PROJECT_ID" \
+  --filter 'labels.delete_date:* AND NOT labels.owner:*' \
+  --format 'csv(name,labels.delete_date)')
+
+# Iterate over instances and delete if delete_date has passed
+IFS=$'\n'
+for instance in $instances; do
+  instance_name=$(echo "$instance" | cut -d "," -f 1)
+  delete_date=$(echo "$instance" | cut -d "," -f 2)
+
+  # Ignore instances starting with "gke"
+  if [[ $instance_name == gke* ]]; then
+    echo "Skipping instance $instance_name."
+    continue
+  fi
+
+  # Convert delete_date to timestamp for comparison
+  delete_timestamp=$(date -j -f "%Y%m%d" "$delete_date" +%s)
+  current_timestamp=$(date +%s)
+
+  if [ -n "$delete_timestamp" ] && [ -n "$current_timestamp" ] && [ "$delete_timestamp" -lt "$current_timestamp" ]; then
+    delete_instance "$instance_name" "$dry_run" "$PROJECT_ID"
+    echo "$instance_name,$delete_date" >> "$csv_file"
+  else
+    echo "Skipping instance $instance_name as delete_date has not passed."
+  fi
+done
+
+echo "Deleted instances saved to $csv_file."
