@@ -62,16 +62,17 @@ echo "Instance Name,Delete Date" > "$csv_file"
 instances=$(gcloud compute instances list \
   --project "$PROJECT_ID" \
   --filter 'labels.delete_date:* AND NOT labels.owner:*' \
-  --format 'csv(name,labels.delete_date)')
+  --format 'csv(name,labels.delete_date,deletionProtection)')
 
-# Iterate over instances and delete if delete_date has passed
+# Iterate over instances and delete if delete_date has passed and deletionProtection is not enabled
 IFS=$'\n'
 for instance in $instances; do
   instance_name=$(echo "$instance" | cut -d "," -f 1)
   delete_date=$(echo "$instance" | cut -d "," -f 2)
+  deletion_protection=$(echo "$instance" | cut -d "," -f 3)
 
-  # Ignore instances starting with "gke"
-  if [[ $instance_name == gke* ]]; then
+  # Ignore instances starting with "gke" or if deletionProtection is enabled
+  if [[ $instance_name == gke* ]] || [ "$deletion_protection" = "true" ]; then
     echo "Skipping instance $instance_name."
     continue
   fi
