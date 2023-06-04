@@ -33,6 +33,9 @@ if [[ "$SLACK_TOKEN" == "" || "$PROJECT_ID" == "" ]]; then
   read -p "Enter the Slack token: " SLACK_TOKEN
 fi
 
+# select the service account of the project
+gcloud auth activate-service-account --key-file="${PROJECT_ID}.json"
+
 # Set variables for GCP
 gcloud config set project "$PROJECT_ID" --quiet
 
