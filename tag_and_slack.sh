@@ -1,33 +1,40 @@
 #!/bin/bash
 
-# Prompt the user to select the project ID
-echo "Select the project ID:"
-echo "1. soleng-dev"
-echo "2. soleng-prod"
-read -p "Enter your choice: " CHOICE
+while getopts p:t: flag
+do
+    case "${flag}" in
+        p) PROJECT_ID=${OPTARG};;
+        t) SLACK_TOKEN=${OPTARG};;
+    esac
+done
 
-# Set the project ID based on the user's choice
-case $CHOICE in
-    1)
-        PROJECT_ID="soleng-dev"
-        ;;
-    2)
-        PROJECT_ID="soleng-prod"
-        ;;
-    *)
-        echo "Invalid choice. Exiting."
-        exit 1
-        ;;
-esac
+if [[ "$SLACK_TOKEN" == "" || "$PROJECT_ID" == "" ]]; then
+  # Prompt the user to select the project ID
+  echo "Select the project ID:"
+  echo "1. soleng-dev"
+  echo "2. soleng-prod"
+  read -p "Enter your choice: " CHOICE
 
-# Set the project ID as an environment variable
-export PROJECT_ID
+  # Set the project ID based on the user's choice
+  case $CHOICE in
+      1)
+          PROJECT_ID="soleng-dev"
+          ;;
+      2)
+          PROJECT_ID="soleng-prod"
+          ;;
+      *)
+          echo "Invalid choice. Exiting."
+          exit 1
+          ;;
+  esac
+
+  # Get the Slack token from user input
+  read -p "Enter the Slack token: " SLACK_TOKEN
+fi
 
 # Set variables for GCP
-gcloud config set project "$PROJECT_ID"
-
-# Get the Slack token from user input
-read -p "Enter the Slack token: " SLACK_TOKEN
+gcloud config set project "$PROJECT_ID" --quiet
 
 # Set variables for Slack
 SLACK_URL="https://slack.com/api/chat.postMessage"
