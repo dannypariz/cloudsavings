@@ -42,6 +42,7 @@ gcloud config set project "$PROJECT_ID" --quiet
 # Set variables for Slack
 SLACK_URL="https://slack.com/api/chat.postMessage"
 SLACK_CHANNEL="#devops-cloud-cost-valid"
+SLACK_CHANNEL2="#devops-acceleration"
 SLACK_FILE_NAME="slack_data.txt"
 VM_FILE_NAME="vm_list_with_owners.txt"
 
@@ -141,9 +142,13 @@ NO_OWNER_INSTANCES=$(cat modified_vm_list_$PROJECT_ID.csv | tail -n +1 | tr '\n'
 # Get the list of instances with an owner label but missing a team/purpose label
 OWNER_MISSING_LABELS_INSTANCES=$(cat vm_list_with_owner_missing_labels_$PROJECT_ID.csv | tail -n +2 | awk -F ',' '{print $1,"<@"$2">"}' | tr '\n' ',' | sed 's/.$//' | tr ',' '\n')
 
-# Send a Slack message with the list of instances without an owner and delete date
+# Send a Slack message with the list of instances without an owner and delete date to $SLACK_CHANNEL
 SLACK_MESSAGE="*${PROJECT_ID}: These GCP instances have no owner and will be deleted on the dates accordingly:*\n$NO_OWNER_INSTANCES"
 curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" -H 'Content-type: application/json' --data "{\"channel\":\"$SLACK_CHANNEL\",\"text\":\"$SLACK_MESSAGE\"}" $SLACK_URL
+
+# Send a Slack message with the list of instances without an owner and delete date to $SLACK_CHANNEL2
+SLACK_MESSAGE="*${PROJECT_ID}: These GCP instances have no owner and will be deleted on the dates accordingly:*\n$NO_OWNER_INSTANCES"
+curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" -H 'Content-type: application/json' --data "{\"channel\":\"$SLACK_CHANNEL2\",\"text\":\"$SLACK_MESSAGE\"}" $SLACK_URL
 
 # Send a Slack message with the list of instances with an owner label but missing a team/purpose label
 SLACK_MESSAGE="*${PROJECT_ID}: These GCP instances have an owner label but are missing a team/purpose label:*\n$OWNER_MISSING_LABELS_INSTANCES"
