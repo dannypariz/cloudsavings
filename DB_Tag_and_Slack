@@ -1,0 +1,83 @@
+#!/bin/bash
+
+# Set your GCP project ID
+PROJECT_ID="soleng-dev"
+
+# Set the default project ID for gcloud
+gcloud config set project $PROJECT_ID
+
+# Get the list of SQL databases in the project
+DB_LIST=$(gcloud sql instances list --format="value(NAME)")
+
+# Get script's directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+# Define the path for the db_list_$PROJECT_ID.csv file
+DB_LIST_FILE="$SCRIPT_DIR/db_list_$PROJECT_ID.csv"
+echo "name,status,owner,team,purpose,last_scan_date" > "$DB_LIST_FILE"
+
+# Get the current date in the desired format
+TODAY=$(date +%Y%m%d)
+
+# Iterate over each database
+while IFS= read -r INSTANCE_NAME; do
+    # Get the database status
+    STATUS=$(gcloud sql instances describe "$INSTANCE_NAME" --project "$PROJECT_ID" --format="value(state)")
+
+    # Run the first script logic
+    OWNER=$(gcloud sql instances describe "$INSTANCE_NAME" --project "$PROJECT_ID" --format="value(labels.owner)")
+    TEAM=$(gcloud sql instances describe "$INSTANCE_NAME" --project "$PROJECT_ID" --format="value(labels.team)")
+    PURPOSE=$(gcloud sql instances describe "$INSTANCE_NAME" --project "$PROJECT_ID" --format="value(labels.purpose)")
+
+    # Check if the instance is "RUNNABLE"
+    if [[ $STATUS == "RUNNABLE" ]]; then
+        # Skip if instance is runnable
+        continue
+    fi
+
+    # Define the path for the stopped_db_list.csv file
+    STOPPED_DB_LIST="$SCRIPT_DIR/stopped_db_list.csv"
+
+    # Create the stopped_db_list.csv file with headers if it doesn't exist
+    if [[ ! -f "$STOPPED_DB_LIST" ]]; then
+        echo "name,owner,project_id,date_first_scan,date_last_scan,days_off" > "$STOPPED_DB_LIST"
+    fi
+
+    # Check if instance already exists in the stopped_db_list.csv file
+    if grep -q "^$INSTANCE_NAME," "$STOPPED_DB_LIST"; then
+        # Update the instance in the stopped_db_list.csv file
+        perl -i -pe "s/^$INSTANCE_NAME,.*?,.*?,.*?,.*?$/$INSTANCE_NAME,$OWNER,$PROJECT_ID,$(awk -F',' "/^$INSTANCE_NAME,/ { print \$5 }" "$STOPPED_DB_LIST"),$TODAY,$(( ($TODAY - $(awk -F',' "/^$INSTANCE_NAME,/ { print \$5 }" "$STOPPED_DB_LIST")) ))/" "$STOPPED_DB_LIST"
+    else
+        # Add the instance to the stopped_db_list.csv file
+        echo "$INSTANCE_NAME,$OWNER,$PROJECT_ID,$TODAY,$TODAY,0" >> "$STOPPED_DB_LIST"
+    fi
+
+    # Update the last_scan_date in the db_list.csv file
+    perl -i -pe "s/^$INSTANCE_NAME,.*?$/$INSTANCE_NAME,$STATUS,$OWNER,$TEAM,$PURPOSE,$TODAY/" "$DB_LIST_FILE"
+
+done <<< "$DB_LIST"
+
+echo "File created: $DB_LIST_FILE"
+
+# Iterate over each database again for updating the stopped_db_list.csv
+while IFS= read -r INSTANCE_NAME; do
+    # Get the database status
+    STATUS=$(gcloud sql instances describe "$INSTANCE_NAME" --project "$PROJECT_ID" --format="value(state)")
+
+    # Define the path for the stopped_db_list.csv file
+    STOPPED_DB_LIST="$SCRIPT_DIR/stopped_db_list.csv"
+
+    # Skip if instance is not stopped
+    if [[ $STATUS != "RUNNABLE" ]]; then
+        continue
+    fi
+
+    # Check if instance exists in the stopped_db_list.csv file
+    if grep -q "^$INSTANCE_NAME," "$STOPPED_DB_LIST"; then
+        # Remove the instance from the stopped_db_list.csv file
+        sed -i '' "/^$INSTANCE_NAME,/d" "$STOPPED_DB_LIST"
+    fi
+
+done <<< "$DB_LIST"
+
+echo "Updated file: $STOPPED_DB_LIST"
