@@ -55,7 +55,7 @@ gcloud compute instances list \
 | while IFS=',' read -r name delete_date zone; do
     if [[ -z "$delete_date" ]]; then
         today=$(date +%Y%m%d)
-        delete_date=$(date -j -f "%Y%m%d" "$delete_date" 2>/dev/null || date -v +14d -j -f "%Y%m%d" "$today" +%Y%m%d)
+        delete_date=$(date -v +14d -j -f "%Y%m%d" "$today" +%Y%m%d)
         gcloud compute instances add-labels "$name" --labels="delete_date=$delete_date" --zone="$zone"
         echo "$name,$delete_date" >> vm_list_without_owner_$PROJECT_ID.csv
     else
