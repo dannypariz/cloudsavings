@@ -1,7 +1,29 @@
 #!/bin/bash
 
-# Set your GCP project ID
-PROJECT_ID="soleng-dev"
+# Define a function that converts a date in %Y%m%d format to a Unix timestamp
+date_to_epoch() {
+    date -j -f "%Y%m%d" "$1" "+%s"
+}
+
+# Prompt the user to select the project ID
+echo "Select the project ID:"
+echo "1. soleng-dev"
+echo "2. soleng-prod"
+read -p "Enter your choice: " CHOICE
+
+# Set the project ID based on the user's choice
+case $CHOICE in
+    1)
+        PROJECT_ID="soleng-dev"
+        ;;
+    2)
+        PROJECT_ID="soleng-prod"
+        ;;
+    *)
+        echo "Invalid choice. Exiting."
+        exit 1
+        ;;
+esac
 
 # Set the default project ID for gcloud
 gcloud config set project $PROJECT_ID
@@ -46,7 +68,9 @@ while IFS= read -r INSTANCE_NAME; do
     # Check if instance already exists in the stopped_db_list.csv file
     if grep -q "^$INSTANCE_NAME," "$STOPPED_DB_LIST"; then
         # Update the instance in the stopped_db_list.csv file
-        perl -i -pe "s/^$INSTANCE_NAME,.*?,.*?,.*?,.*?$/$INSTANCE_NAME,$OWNER,$PROJECT_ID,$(awk -F',' "/^$INSTANCE_NAME,/ { print \$5 }" "$STOPPED_DB_LIST"),$TODAY,$(( ($TODAY - $(awk -F',' "/^$INSTANCE_NAME,/ { print \$5 }" "$STOPPED_DB_LIST")) ))/" "$STOPPED_DB_LIST"
+        FIRST_SCAN_DATE=$(awk -F',' "/^$INSTANCE_NAME,/ { print \$4 }" "$STOPPED_DB_LIST")
+        DAYS_OFF=$(( ( $(date_to_epoch $TODAY) - $(date_to_epoch $FIRST_SCAN_DATE) ) / 86400 ))
+        perl -i -pe "s/^$INSTANCE_NAME,.*?,.*?,.*?,.*?$/$INSTANCE_NAME,$OWNER,$PROJECT_ID,$FIRST_SCAN_DATE,$TODAY,$DAYS_OFF/" "$STOPPED_DB_LIST"
     else
         # Add the instance to the stopped_db_list.csv file
         echo "$INSTANCE_NAME,$OWNER,$PROJECT_ID,$TODAY,$TODAY,0" >> "$STOPPED_DB_LIST"
