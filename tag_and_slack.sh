@@ -1,6 +1,6 @@
 #!/bin/bash
 
-hile getopts p:t:w: flag
+while getopts p:t:w: flag
 do
     case "${flag}" in
         p) PROJECT_ID=${OPTARG};;
@@ -58,7 +58,7 @@ gcloud compute instances list \
         today=$(date +%Y%m%d)
         delete_date=$(date -v +14d -j -f "%Y%m%d" "$today" +%Y%m%d)
         gcloud compute instances add-labels "$name" --labels="delete_date=$delete_date" --zone="$zone"
-        echo "$name,$delete_date" >> "${WORK_DIR}"vm_list_without_owner_$PROJECT_ID.csv
+        echo "$name,$delete_date" >> vm_list_without_owner_$PROJECT_ID.csv
     else
         echo "Skipping delete date label on instance $name because it already has a delete date label."
     fi
@@ -147,13 +147,13 @@ OWNER_MISSING_LABELS_INSTANCES=$(cat vm_list_with_owner_missing_labels_$PROJECT_
 SLACK_MESSAGE="*${PROJECT_ID}: These GCP instances have no owner and will be deleted on the dates accordingly:*\n$NO_OWNER_INSTANCES"
 curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" -H 'Content-type: application/json' --data "{\"channel\":\"$SLACK_CHANNEL\",\"text\":\"$SLACK_MESSAGE\"}" $SLACK_URL
 
+
 # Send a Slack message with the list of instances without an owner and delete date to $SLACK_CHANNEL2 if the list is not empty
 if [[ -n "$NO_OWNER_INSTANCES" ]]; then
   SLACK_MESSAGE="*${PROJECT_ID}: These GCP instances have no owner and will be deleted on the dates accordingly:*\n$NO_OWNER_INSTANCES"
   curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" -H 'Content-type: application/json' --data "{\"channel\":\"$SLACK_CHANNEL2\",\"text\":\"$SLACK_MESSAGE\"}" $SLACK_URL
 fi
 
-# Send a Slack message with the list of instances with an owner label but missing a team/purpose label
 SLACK_MESSAGE="*${PROJECT_ID}: These GCP instances have an owner label but are missing a team/purpose label:*\n$OWNER_MISSING_LABELS_INSTANCES"
 curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" -H 'Content-type: application/json' --data "{\"channel\":\"$SLACK_CHANNEL\",\"text\":\"$SLACK_MESSAGE\"}" $SLACK_URL
 
