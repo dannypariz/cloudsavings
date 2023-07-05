@@ -1,10 +1,11 @@
 #!/bin/bash
 
-while getopts p:t: flag
+hile getopts p:t:w: flag
 do
     case "${flag}" in
         p) PROJECT_ID=${OPTARG};;
         t) SLACK_TOKEN=${OPTARG};;
+        w) WORK_DIR=${OPTARG};;
     esac
 done
 
@@ -34,7 +35,7 @@ if [[ "$SLACK_TOKEN" == "" || "$PROJECT_ID" == "" ]]; then
 fi
 
 # select the service account of the project
-gcloud auth activate-service-account --key-file="${PROJECT_ID}.json"
+gcloud auth activate-service-account --key-file="${WORK_DIR}${PROJECT_ID}.json"
 
 # Set variables for GCP
 gcloud config set project "$PROJECT_ID" --quiet
@@ -57,7 +58,7 @@ gcloud compute instances list \
         today=$(date +%Y%m%d)
         delete_date=$(date -v +14d -j -f "%Y%m%d" "$today" +%Y%m%d)
         gcloud compute instances add-labels "$name" --labels="delete_date=$delete_date" --zone="$zone"
-        echo "$name,$delete_date" >> vm_list_without_owner_$PROJECT_ID.csv
+        echo "$name,$delete_date" >> "${WORK_DIR}"vm_list_without_owner_$PROJECT_ID.csv
     else
         echo "Skipping delete date label on instance $name because it already has a delete date label."
     fi
