@@ -218,7 +218,7 @@ SLACK_MESSAGE="*${PROJECT_ID}: These GCP instances have no owner and will be del
 curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" -H 'Content-type: application/json' --data "{\"channel\":\"$SLACK_CHANNEL\",\"text\":\"$SLACK_MESSAGE\"}" $SLACK_URL
 
 # Add the GKE clusters to the Slack message
-NO_OWNER_GKE_CLUSTERS=$(cat modified_gke_list_soleng-dev.csv | tail -n +1 | tr '\n' '\n' | sed 's/^/ - /')
+NO_OWNER_GKE_CLUSTERS=$(cat modified_gke_list_$PROJECT_ID.csv | tail -n +1 | tr '\n' '\n' | sed 's/^/ - /')
 SLACK_MESSAGE="*${PROJECT_ID}: These GKE clusters have no owner and will be deleted on the dates accordingly:*\n$NO_OWNER_GKE_CLUSTERS"
 curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" -H 'Content-type: application/json' --data "{\"channel\":\"$SLACK_CHANNEL\",\"text\":\"$SLACK_MESSAGE\"}" $SLACK_URL
 
