@@ -30,7 +30,7 @@ send_to_slack() {
 }
 
 # Your Slack API token, channel and URL go here
-SLACK_TOKEN="XXX"
+SLACK_TOKEN="xoxb-25188587398-4683051331075-d0bQyHPCA83qSmGrdxzJibWe"
 SLACK_CHANNEL="#devops-cloud-cost-valid"
 SLACK_URL="https://slack.com/api/chat.postMessage"
 
@@ -73,7 +73,7 @@ while IFS= read -r INSTANCE_NAME; do
         continue
     fi
 
-    STOPPED_DB_LIST="$SCRIPT_DIR/stopped_db_list_$PPROJECT_ID.csv"
+    STOPPED_DB_LIST="$SCRIPT_DIR/stopped_db_list_$PROJECT_ID.csv"
 
     if [[ ! -f "$STOPPED_DB_LIST" ]]; then
         echo "name,owner,project_id,date_first_scan,date_last_scan,days_off" > "$STOPPED_DB_LIST"
@@ -105,7 +105,7 @@ done < "$STOPPED_DB_LIST"
 
 while IFS= read -r INSTANCE_NAME; do
     STATUS=$(gcloud sql instances describe "$INSTANCE_NAME" --project "$PROJECT_ID" --format="value(state)")
-    STOPPED_DB_LIST="$SCRIPT_DIR/stopped_db_list_$PPROJECT_ID.csv"
+    STOPPED_DB_LIST="$SCRIPT_DIR/stopped_db_list_$PROJECT_ID.csv"
 
     if [[ $STATUS != "RUNNABLE" ]]; then
         continue
