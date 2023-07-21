@@ -9,36 +9,6 @@ do
     esac
 done
 
-# Define a function that converts a date in %Y%m%d format to a Unix timestamp
-date_to_epoch() {
-    date -j -f "%Y%m%d" "$1" "+%s"
-}
-
-# Function to convert CSV to Slack message block format
-csv_to_slack() {
-    IFS=',' read -ra HEADER <<< "$1"
-    shift
-    ROWS=()
-    for line; do
-        IFS=',' read -ra FIELDS <<< "$line"
-        ROW='"fields": ['
-        for i in "${!FIELDS[@]}"; do
-            ROW+="{\"type\": \"mrkdwn\", \"text\": \"*${HEADER[$i]}:*\n${FIELDS[$i]}\"},"
-        done
-        ROW=${ROW%,} # Remove trailing comma
-        ROW+=']'
-        ROWS+=("$ROW")
-    done
-    SLACK_BLOCKS='{"blocks": [{"type": "divider"},{"type": "section",'${ROWS[*]}'}]}'
-    echo "$SLACK_BLOCKS"
-}
-
-send_to_slack() {
-    SLACK_MESSAGE="*${PROJECT_ID}: These SQL DBs have been off for sevral days:*\n\`\`\`$NO_OWNER_INSTANCES\`\`\`"
-    curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" -H 'Content-type: application/json' --data "{\"channel\":\"$SLACK_CHANNEL\",\"text\":\"$SLACK_MESSAGE\"}" $SLACK_URL
-    curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" -H 'Content-type: application/json' --data "{\"channel\":\"$SLACK_CHANNEL2\",\"text\":\"$SLACK_MESSAGE\"}" $SLACK_URL
-}
-
 if [[ "$SLACK_TOKEN" == "" || "$PROJECT_ID" == "" ]]; then
   # Prompt the user to select the project ID
   echo "Select the project ID:"
@@ -204,71 +174,6 @@ while IFS= read -r gke_cluster_owner_data; do
   fi
 done < gke_clusters_with_owners.txt
 
-#SQL Script
-DB_LIST=$(gcloud sql instances list --format="value(NAME)")
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-
-DB_LIST_FILE="$SCRIPT_DIR/db_list_$PROJECT_ID.csv"
-echo "name,status,owner,team,purpose,last_scan_date" > "$DB_LIST_FILE"
-
-TODAY=$(date +%Y%m%d)
-
-while IFS= read -r INSTANCE_NAME; do
-    STATUS=$(gcloud sql instances describe "$INSTANCE_NAME" --project "$PROJECT_ID" --format="value(state)")
-    OWNER=$(gcloud sql instances describe "$INSTANCE_NAME" --project "$PROJECT_ID" --format="value(labels.owner)")
-    TEAM=$(gcloud sql instances describe "$INSTANCE_NAME" --project "$PROJECT_ID" --format="value(labels.team)")
-    PURPOSE=$(gcloud sql instances describe "$INSTANCE_NAME" --project "$PROJECT_ID" --format="value(labels.purpose)")
-
-    if [[ $STATUS == "RUNNABLE" ]]; then
-        continue
-    fi
-
-    STOPPED_DB_LIST="$SCRIPT_DIR/stopped_db_list_$PROJECT_ID.csv"
-
-    if [[ ! -f "$STOPPED_DB_LIST" ]]; then
-        echo "name,owner,project_id,date_first_scan,date_last_scan,days_off" > "$STOPPED_DB_LIST"
-    fi
-
-    if grep -q "^$INSTANCE_NAME," "$STOPPED_DB_LIST"; then
-        FIRST_SCAN_DATE=$(awk -F',' "/^$INSTANCE_NAME,/ { print \$4 }" "$STOPPED_DB_LIST")
-        DAYS_OFF=$(( ( $(date_to_epoch $TODAY) - $(date_to_epoch $FIRST_SCAN_DATE) ) / 86400 ))
-        perl -i -pe "s/^$INSTANCE_NAME,.*?,.*?,.*?,.*?$/$INSTANCE_NAME,$OWNER,$PROJECT_ID,$FIRST_SCAN_DATE,$TODAY,$DAYS_OFF/" "$STOPPED_DB_LIST"
-    else
-        echo "$INSTANCE_NAME,$OWNER,$PROJECT_ID,$TODAY,$TODAY,0" >> "$STOPPED_DB_LIST"
-    fi
-
-    perl -i -pe "s/^$INSTANCE_NAME,.*?$/$INSTANCE_NAME,$STATUS,$OWNER,$TEAM,$PURPOSE,$TODAY/" "$DB_LIST_FILE"
-
-done <<< "$DB_LIST"
-
-echo "File created: $DB_LIST_FILE"
-
-# after updating the $STOPPED_DB_LIST, check if each instance in it still exists in the GCP
-while IFS=',' read -r INSTANCE_NAME _; do
-    # check if the instance still exists in the GCP
-    EXISTS=$(gcloud sql instances list --format="value(NAME)" --filter="NAME:$INSTANCE_NAME")
-    if [[ -z "$EXISTS" ]]; then
-        # if it doesn't exist, remove it from the $STOPPED_DB_LIST
-        sed -i "" "/^$INSTANCE_NAME,/d" "$STOPPED_DB_LIST"
-    fi
-done < "$STOPPED_DB_LIST"
-
-while IFS= read -r INSTANCE_NAME; do
-    STATUS=$(gcloud sql instances describe "$INSTANCE_NAME" --project "$PROJECT_ID" --format="value(state)")
-    STOPPED_DB_LIST="$SCRIPT_DIR/stopped_db_list_$PROJECT_ID.csv"
-
-    if [[ $STATUS != "RUNNABLE" ]]; then
-        continue
-    fi
-
-    if grep -q "^$INSTANCE_NAME," "$STOPPED_DB_LIST"; then
-        sed -i "" "/^$INSTANCE_NAME,/d" "$STOPPED_DB_LIST"
-    fi
-
-done <<< "$DB_LIST"
-
-echo "Updated file: $STOPPED_DB_LIST"
-
 # Generate a CSV file with the list of instances without an owner label and their respective delete dates
 gcloud compute instances list \
 --project $PROJECT_ID \
@@ -307,7 +212,9 @@ curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" -H 'Content-type: applicati
 NO_OWNER_GKE_CLUSTERS=$(cat modified_gke_list_$PROJECT_ID.csv | tail -n +1 | tr '\n' '\n' | sed 's/^/ - /')
 SLACK_MESSAGE="*${PROJECT_ID}: These GKE clusters have no owner and will be deleted on the dates accordingly:*\n$NO_OWNER_GKE_CLUSTERS"
 curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" -H 'Content-type: application/json' --data "{\"channel\":\"$SLACK_CHANNEL\",\"text\":\"$SLACK_MESSAGE\"}" $SLACK_URL
-curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" -H 'Content-type: application/json' --data "{\"channel\":\"$SLACK_CHANNEL2\",\"text\":\"$SLACK_MESSAGE\"}" $SLACK_URL
+if [[ -n "$NO_OWNER_GKE_CLUSTERS" ]]; then
+  curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" -H 'Content-type: application/json' --data "{\"channel\":\"$SLACK_CHANNEL2\",\"text\":\"$SLACK_MESSAGE\"}" $SLACK_URL
+fi
 
 # Send a Slack message with the list of instances without an owner and delete date to $SLACK_CHANNEL2 if the list is not empty
 if [[ -n "$NO_OWNER_INSTANCES" ]]; then
@@ -318,10 +225,6 @@ fi
 # Send a Slack message with the list of instances with an owner label but missing a team/purpose label
 SLACK_MESSAGE="*${PROJECT_ID}: These GCP instances have an owner label but are missing a team/purpose label:*\n$OWNER_MISSING_LABELS_INSTANCES"
 curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" -H 'Content-type: application/json' --data "{\"channel\":\"$SLACK_CHANNEL\",\"text\":\"$SLACK_MESSAGE\"}" $SLACK_URL
-
-# Call the send_to_slack function after the CSV files are updated
-NO_OWNER_INSTANCES=$(awk -F',' 'BEGIN{OFS=","}{ print $1,$2,$3,$6 }' $STOPPED_DB_LIST)
-send_to_slack
 
 # Remove the CSV files
 rm vm_list_without_owner_$PROJECT_ID.csv vm_list_with_owner_missing_labels_$PROJECT_ID.csv modified_vm_list_$PROJECT_ID.csv gke_clusters_without_owner_$PROJECT_ID.csv
