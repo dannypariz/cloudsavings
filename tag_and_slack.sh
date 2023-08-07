@@ -88,6 +88,7 @@ gcloud compute instances list \
     fi
 done
 
+ 
 # Get the list of GKE clusters without an owner label and add a "delete date" label with the value of today's date plus 14 days
 gcloud container clusters list \
 --project $PROJECT_ID \
