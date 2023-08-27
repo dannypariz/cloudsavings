@@ -1,3 +1,5 @@
+import argparse
+import os
 import csv
 import datetime
 import requests
@@ -6,8 +8,21 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from oauth2client.client import GoogleCredentials
 
-# Slack API Token (replace with your token)
-SLACK_TOKEN = "xoxb-25188587398-4683051331075-J1vt8mW9umHoTSl1j4XpWtKW"
+def get_args():
+    parser = argparse.ArgumentParser(description="Script to fetch and upload stopped instances data to Slack")
+    parser.add_argument("-p", "--project_id", required=True, help="Project ID")
+    parser.add_argument("-t", "--slack_token", required=True, help="Slack token")
+    parser.add_argument("-w", "--work_dir", required=True, help="Working directory")
+    args = parser.parse_args()
+    return args
+
+args = get_args()
+PROJECT_ID = args.project_id
+SLACK_TOKEN = args.slack_token
+WORK_DIR = args.work_dir
+
+os.system(f"gcloud auth activate-service-account --key-file='{WORK_DIR}{PROJECT_ID}.json'")
+os.system(f"gcloud config set project {PROJECT_ID} --quiet")
 
 # Slack channel name
 CHANNEL_NAME = "#devops-cloud-cost-valid"
@@ -15,9 +30,6 @@ CHANNEL_NAME = "#devops-cloud-cost-valid"
 # Slack API Endpoints
 POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 UPLOAD_FILE_URL = "https://slack.com/api/files.upload"
-
-# Set the desired project ID
-PROJECT_ID = "soleng-dev"
 
 # Set the output file name
 OUTPUT_FILE = "stopped_instances.csv"
